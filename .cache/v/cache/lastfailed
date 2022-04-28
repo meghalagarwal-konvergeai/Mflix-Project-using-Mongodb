@@ -1,0 +1,7 @@
+{
+  "tests/test_get_comments.py::test_fetch_comments_for_another_movie": true,
+  "tests/test_get_comments.py::test_fetch_comments_for_movie": true,
+  "tests/test_paging.py::test_supports_paging_by_text": true,
+  "tests/test_user_management.py::test_registration": true,
+  "tests/test_user_preferences.py::test_invalid_user_should_not_have_preferences": true
+}
