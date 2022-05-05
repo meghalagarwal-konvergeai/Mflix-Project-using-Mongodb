@@ -47,8 +47,10 @@ def get_db():
         MFLIX_DB_URI,
         # TODO: Connection Pooling
         # Set the maximum connection pool size to 50 active connections.
+        maxPoolSize=50,
         # TODO: Timeouts
         # Set the write timeout limit to 2500 milliseconds.
+        wtimeout=2500,
         )[MFLIX_DB_NAME]
     return db
 
@@ -268,31 +270,22 @@ def get_movie(id):
                 }
             },
             {
-                "$lookup":
-                {
+                "$lookup": {
                     "from": "comments",
-                    "let":{"id": "$_id"},
-                    "pipline":[
-                        { "$match":
-                            {"$expr":{"$eq":["$movie_id","$$id"]}}
-                        },
-                        {
-                            '$sort': {
-                                '$date': -1
-                            }
-                        }
-                    ],
-                    "as":"comments"
+                    "localField": "_id",
+                    "foreignField": "movie_id",
+                    "as": "comments"
                 }
             }
         ]
 
         movie = db.movies.aggregate(pipeline).next()
+        movie["comments"] = sorted(movie.get("comments", []),key = lambda c : c.get("date"),reverse = True)
         return movie
 
     # TODO: Error Handling
     # If an invalid ID is passed to `get_movie`, it should return None.
-    except (StopIteration) as _:
+    except InvalidId as e:
 
         """
         Ticket: Error Handling
@@ -345,7 +338,13 @@ def add_comment(movie_id, user, comment, date):
     """
     # TODO: Create/Update Comments
     # Construct the comment document to be inserted into MongoDB.
-    comment_doc = { "some_field": "some_value" }
+    comment_doc = { 
+        "movie_id": ObjectId(movie_id),
+        "name":user.name,
+        "email": user.email,
+        "text": comment,
+        "date": date
+     }
     return db.comments.insert_one(comment_doc)
 
 
@@ -359,8 +358,8 @@ def update_comment(comment_id, user_email, text, date):
     # Use the user_email and comment_id to select the proper comment, then
     # update the "text" and "date" of the selected comment.
     response = db.comments.update_one(
-        { "some_field": "some_value" },
-        { "$set": { "some_other_field": "some_other_value" } }
+        { "email": user_email },
+        { "$set": { "text": text, "data":date } }
     )
 
     return response
@@ -381,7 +380,7 @@ def delete_comment(comment_id, user_email):
 
     # TODO: Delete Comments
     # Use the user_email and comment_id to delete the proper comment.
-    response = db.comments.delete_one( { "_id": ObjectId(comment_id) } )
+    response = db.comments.delete_one( { "_id": ObjectId(comment_id), "email": user_email } )
     return response
 
 
@@ -553,16 +552,31 @@ def most_active_commenters():
 
     """
     Ticket: User Report
-
     Construct a pipeline to find the users who comment the most on MFlix, sort
     by the number of comments, and then only return the 20 documents with the
     highest values.
-
     No field projection necessary.
     """
     # TODO: User Report
     # Return the 20 users who have commented the most on MFlix.
-    pipeline = [] 
+    pipeline = [
+        {
+            "$group": {
+                "_id": "$email",
+                "count": {
+                    "$sum": 1
+                }
+            }
+        },
+        {
+            "$sort": {
+                "count" : -1
+            }
+        },
+        {
+            "$limit": 20
+        }
+    ]
 
     rc = db.comments.read_concern # you may want to change this read concern!
     comments = db.comments.with_options(read_concern=rc)
